@@ -19,6 +19,8 @@ import SendIcon from './components/icons/SendIcon';
 import MicrophoneIcon from './components/icons/MicrophoneIcon';
 import LoadingDots from './components/LoadingDots';
 import MenuIcon from './components/icons/MenuIcon';
+import WelcomeScreen from './components/WelcomeScreen';
+import ApiKeyPrompt from './components/ApiKeyPrompt';
 
 const App: React.FC = () => {
   const { user, isLoading: isAuthLoading } = useAuth();
@@ -30,12 +32,41 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
+  const [hasApiKey, setHasApiKey] = useState(false);
+  const [isCheckingApiKey, setIsCheckingApiKey] = useState(true);
+
   const geminiChat = useRef<Chat | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const activeSession = chatSessions.find(
     (session) => session.id === activeSessionId,
   );
+
+  useEffect(() => {
+    if (!user) {
+      setIsCheckingApiKey(false);
+      setHasApiKey(false); // Reset on logout
+      return;
+    }
+
+    const checkApiKey = async () => {
+      setIsCheckingApiKey(true);
+      try {
+        if (window.aistudio && (await window.aistudio.hasSelectedApiKey())) {
+          setHasApiKey(true);
+        } else {
+          setHasApiKey(false);
+        }
+      } catch (e) {
+        console.error('Error checking for API key:', e);
+        setHasApiKey(false);
+      } finally {
+        setIsCheckingApiKey(false);
+      }
+    };
+
+    checkApiKey();
+  }, [user]);
 
   const updateSessionMessages = useCallback(
     (sessionId: string, updateFn: (messages: Message[]) => Message[]) => {
@@ -275,7 +306,7 @@ const App: React.FC = () => {
     }
   }, [transcript]);
 
-  if (isAuthLoading) {
+  if (isAuthLoading || isCheckingApiKey) {
     return (
       <div className="flex items-center justify-center h-screen bg-white dark:bg-gray-900">
         <LoadingDots />
@@ -287,6 +318,10 @@ const App: React.FC = () => {
     return <AuthModal />;
   }
   
+  if (!hasApiKey) {
+    return <ApiKeyPrompt onKeySelected={() => setHasApiKey(true)} />;
+  }
+
   const lastMessage = activeSession?.messages[activeSession.messages.length - 1];
 
   return (
@@ -314,21 +349,27 @@ const App: React.FC = () => {
         </header>
 
         <div className="flex-1 overflow-y-auto">
-          <div className="max-w-4xl mx-auto">
-            {activeSession?.messages.map((message, index) => (
-              <ChatMessage key={index} message={message} />
-            ))}
-            {isLoading &&
-              lastMessage?.role === MessageRole.MODEL &&
-              lastMessage?.content === '' && (
-                <div className="p-4 sm:p-6 bg-gray-50 dark:bg-gray-800">
-                  <div className="max-w-4xl mx-auto flex space-x-4">
-                    <div className="w-8 h-8 flex-shrink-0"></div>
-                    <LoadingDots />
-                  </div>
-                </div>
-              )}
-            <div ref={messagesEndRef} />
+          <div className="max-w-4xl mx-auto h-full">
+            {activeSession && activeSession.messages.length > 0 ? (
+              <>
+                {activeSession.messages.map((message, index) => (
+                  <ChatMessage key={index} message={message} />
+                ))}
+                {isLoading &&
+                  lastMessage?.role === MessageRole.MODEL &&
+                  lastMessage?.content === '' && (
+                    <div className="p-4 sm:p-6 bg-gray-50 dark:bg-gray-800">
+                      <div className="max-w-4xl mx-auto flex space-x-4">
+                        <div className="w-8 h-8 flex-shrink-0"></div>
+                        <LoadingDots />
+                      </div>
+                    </div>
+                  )}
+                <div ref={messagesEndRef} />
+              </>
+            ) : (
+              !isLoading && <WelcomeScreen onPromptClick={handleSendMessage} />
+            )}
           </div>
         </div>
 

@@ -1,6 +1,10 @@
 import React from 'react';
 
-const SparkleIcon = () => (
+interface IconProps {
+  className?: string;
+}
+
+const SparkleIcon: React.FC<IconProps> = ({ className = 'h-5 w-5' }) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
     width="24"
@@ -11,7 +15,7 @@ const SparkleIcon = () => (
     strokeWidth="2"
     strokeLinecap="round"
     strokeLinejoin="round"
-    className="h-5 w-5"
+    className={className}
   >
     <path d="M12 2 L14.5 9.5 L22 12 L14.5 14.5 L12 22 L9.5 14.5 L2 12 L9.5 9.5 Z" />
   </svg>

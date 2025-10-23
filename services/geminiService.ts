@@ -1,7 +1,7 @@
 import { GoogleGenAI, Chat, Content } from '@google/genai';
 import { Message, MessageRole } from '../types';
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+const getAi = () => new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 const buildGeminiHistory = (messages: Message[]): Content[] => {
   return messages
@@ -14,7 +14,7 @@ const buildGeminiHistory = (messages: Message[]): Content[] => {
 
 export const createNewGeminiChat = (messages: Message[] = []): Chat => {
   const history = buildGeminiHistory(messages);
-
+  const ai = getAi();
   const chat = ai.chats.create({
     model: 'gemini-2.5-flash',
     history: history,
@@ -55,6 +55,7 @@ export const getTitleForChat = async (messages: Message[]): Promise<string> => {
   const prompt = `Generate a short, concise title for this chat (max 5 words), based on this conversation:\n\n${conversationForTitle}\n\nDo not use quotes in the title.`;
 
   try {
+    const ai = getAi();
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash', // Good for simple text tasks
       contents: prompt,
