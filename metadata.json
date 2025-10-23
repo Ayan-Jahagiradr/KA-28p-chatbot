@@ -1,0 +1,7 @@
+{
+  "name": "KA-28",
+  "description": "A sleek, responsive chat application powered by the Gemini API, inspired by the minimalist and fast UI of Groq. Engage in real-time, streaming conversations with a powerful AI assistant.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
