@@ -1,16 +1,7 @@
 import { GoogleGenAI, Chat, Content } from '@google/genai';
 import { Message, MessageRole } from '../types';
 
-// IMPORTANT: Replace with your actual Gemini API Key
-const API_KEY = 'YOUR_GEMINI_API_KEY_HERE';
-
-if (API_KEY === 'YOUR_GEMINI_API_KEY_HERE') {
-  console.warn(
-    'Gemini API key not set. Please replace "YOUR_GEMINI_API_KEY_HERE" in services/geminiService.ts with your actual key.',
-  );
-}
-
-const ai = new GoogleGenAI({ apiKey: API_KEY });
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 const buildGeminiHistory = (messages: Message[]): Content[] => {
   return messages

@@ -38,10 +38,7 @@ const App: React.FC = () => {
   );
 
   const updateSessionMessages = useCallback(
-    (
-      sessionId: string,
-      updateFn: (messages: Message[]) => Message[],
-    ) => {
+    (sessionId: string, updateFn: (messages: Message[]) => Message[]) => {
       setChatSessions((prevSessions) =>
         prevSessions.map((session) =>
           session.id === sessionId
@@ -52,28 +49,17 @@ const App: React.FC = () => {
     },
     [],
   );
-  
-  const createNewChat = useCallback((isInitial = false) => {
-    const currentActiveSession = chatSessions.find(s => s.id === activeSessionId);
-    if (currentActiveSession && currentActiveSession.messages.length === 0 && !isInitial) {
+
+  const createNewChat = useCallback(() => {
+    if (activeSessionId === null) {
       setIsSidebarOpen(false);
       return;
     }
-    const newSession: ChatSession = {
-      id: uuidv4(),
-      title: 'New Chat',
-      messages: [],
-    };
-    if (isInitial) {
-      setChatSessions([newSession]);
-    } else {
-      setChatSessions((prev) => [newSession, ...prev]);
-    }
-    setActiveSessionId(newSession.id);
+    setActiveSessionId(null);
+    setInput('');
     geminiChat.current = createNewGeminiChat();
     setIsSidebarOpen(false);
-  }, [activeSessionId, chatSessions]);
-
+  }, [activeSessionId]);
 
   // Load sessions from localStorage on mount
   useEffect(() => {
@@ -106,13 +92,12 @@ const App: React.FC = () => {
           setActiveSessionId(loadedSessions[0].id);
         }
       } else {
-        createNewChat(true);
+        setActiveSessionId(null);
       }
     } else {
       setChatSessions([]);
       setActiveSessionId(null);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   // Save sessions to localStorage
@@ -125,9 +110,11 @@ const App: React.FC = () => {
         );
         if (activeSessionId) {
           localStorage.setItem(`activeSessionId_${user.uid}`, activeSessionId);
+        } else {
+          // In 'new chat' state, remove saved active ID so reload goes to last used chat
+          localStorage.removeItem(`activeSessionId_${user.uid}`);
         }
       } else {
-        // If there are no sessions, clean up localStorage
         localStorage.removeItem(`chatSessions_${user.uid}`);
         localStorage.removeItem(`activeSessionId_${user.uid}`);
       }
@@ -141,81 +128,108 @@ const App: React.FC = () => {
   useEffect(() => {
     if (activeSession) {
       geminiChat.current = createNewGeminiChat(activeSession.messages);
+    } else {
+      geminiChat.current = createNewGeminiChat();
     }
-  }, [activeSessionId, activeSession]);
-  
-  const handleSendMessage = useCallback(async (messageContent: string) => {
-    if (!messageContent.trim() || isLoading || !activeSessionId) return;
+  }, [activeSession]);
 
-    const currentSession = chatSessions.find((s) => s.id === activeSessionId);
-    if (!currentSession) return;
+  const handleSendMessage = useCallback(
+    async (messageContent: string) => {
+      if (!messageContent.trim() || isLoading) return;
 
-    const userMessage: Message = {
-      role: MessageRole.USER,
-      content: messageContent,
-    };
+      setInput('');
+      setIsLoading(true);
 
-    const modelMessage: Message = {
-      role: MessageRole.MODEL,
-      content: '',
-    };
+      let sessionId = activeSessionId;
+      let isNewSession = false;
+      let sessionHistory: Message[] = [];
 
-    const initialMessages = [
-      ...currentSession.messages,
-      userMessage,
-      modelMessage,
-    ];
-    const modelMessageIndex = initialMessages.length - 1;
-
-    updateSessionMessages(activeSessionId, () => initialMessages);
-
-    setInput('');
-    setIsLoading(true);
-
-    try {
-      if (!geminiChat.current) {
-        geminiChat.current = createNewGeminiChat(currentSession.messages);
-      }
-      const stream = sendMessageStream(geminiChat.current, messageContent);
-
-      let lastFullResponse = '';
-      for await (const chunk of stream) {
-        lastFullResponse = chunk;
-        updateSessionMessages(activeSessionId, (messages) =>
-          messages.map((msg, index) =>
-            index === modelMessageIndex ? { ...msg, content: chunk } : msg,
-          ),
-        );
+      if (sessionId === null) {
+        isNewSession = true;
+        const newSession: ChatSession = {
+          id: uuidv4(),
+          title: 'New Chat',
+          messages: [],
+        };
+        setChatSessions((prev) => [newSession, ...prev]);
+        sessionId = newSession.id;
+        setActiveSessionId(newSession.id);
+      } else {
+        const currentSession = chatSessions.find((s) => s.id === sessionId);
+        if (!currentSession) {
+          setIsLoading(false);
+          return; // Should not happen
+        }
+        sessionHistory = currentSession.messages;
       }
 
-      if (currentSession.messages.length === 0) {
-        const finalMessagesForTitle = [
-          userMessage,
-          { role: MessageRole.MODEL, content: lastFullResponse },
-        ];
-        const newTitle = await getTitleForChat(finalMessagesForTitle);
-        setChatSessions((prev) =>
-          prev.map((s) =>
-            s.id === activeSessionId ? { ...s, title: newTitle } : s,
-          ),
-        );
+      if (!sessionId) {
+        setIsLoading(false);
+        return;
       }
-    } catch (error) {
-      console.error(error);
-      const errorMessage: Message = {
-        role: MessageRole.ERROR,
-        content: 'Sorry, something went wrong. Please try again.',
+      const finalSessionId = sessionId;
+
+      const userMessage: Message = {
+        role: MessageRole.USER,
+        content: messageContent,
       };
-      updateSessionMessages(activeSessionId, (messages) =>
-        messages.map((msg, index) =>
-          index === modelMessageIndex ? errorMessage : msg,
-        ),
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  }, [isLoading, activeSessionId, chatSessions, updateSessionMessages]);
+      const modelMessage: Message = { role: MessageRole.MODEL, content: '' };
 
+      updateSessionMessages(finalSessionId, (messages) => [
+        ...messages,
+        userMessage,
+        modelMessage,
+      ]);
+
+      try {
+        if (!geminiChat.current || isNewSession) {
+          geminiChat.current = createNewGeminiChat(sessionHistory);
+        }
+        const stream = sendMessageStream(geminiChat.current, messageContent);
+
+        let lastFullResponse = '';
+        for await (const chunk of stream) {
+          lastFullResponse = chunk;
+          updateSessionMessages(finalSessionId, (messages) => {
+            const newMessages = [...messages];
+            if (newMessages.length > 0) {
+              newMessages[newMessages.length - 1].content = chunk;
+            }
+            return newMessages;
+          });
+        }
+
+        if (isNewSession) {
+          const finalMessagesForTitle = [
+            userMessage,
+            { role: MessageRole.MODEL, content: lastFullResponse },
+          ];
+          const newTitle = await getTitleForChat(finalMessagesForTitle);
+          setChatSessions((prev) =>
+            prev.map((s) =>
+              s.id === finalSessionId ? { ...s, title: newTitle } : s,
+            ),
+          );
+        }
+      } catch (error) {
+        console.error(error);
+        const errorMessage: Message = {
+          role: MessageRole.ERROR,
+          content: 'Sorry, something went wrong. Please try again.',
+        };
+        updateSessionMessages(finalSessionId, (messages) => {
+          const newMessages = [...messages];
+          if (newMessages.length > 0) {
+            newMessages[newMessages.length - 1] = errorMessage;
+          }
+          return newMessages;
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [isLoading, activeSessionId, chatSessions, updateSessionMessages],
+  );
 
   const selectChat = (id: string) => {
     setActiveSessionId(id);
@@ -229,7 +243,7 @@ const App: React.FC = () => {
       if (remainingSessions.length > 0) {
         setActiveSessionId(remainingSessions[0].id);
       } else {
-        createNewChat(true);
+        setActiveSessionId(null);
       }
     }
   };
@@ -272,6 +286,8 @@ const App: React.FC = () => {
   if (!user) {
     return <AuthModal />;
   }
+  
+  const lastMessage = activeSession?.messages[activeSession.messages.length - 1];
 
   return (
     <div className="flex h-screen bg-white dark:bg-gray-900 font-sans">
@@ -293,7 +309,7 @@ const App: React.FC = () => {
             <MenuIcon />
           </button>
           <h2 className="ml-4 font-semibold text-gray-800 dark:text-gray-200">
-            {activeSession?.title || 'Chat'}
+            {activeSession?.title || 'New Chat'}
           </h2>
         </header>
 
@@ -303,8 +319,8 @@ const App: React.FC = () => {
               <ChatMessage key={index} message={message} />
             ))}
             {isLoading &&
-              activeSession?.messages[activeSession.messages.length - 1]
-                ?.role === MessageRole.USER && (
+              lastMessage?.role === MessageRole.MODEL &&
+              lastMessage?.content === '' && (
                 <div className="p-4 sm:p-6 bg-gray-50 dark:bg-gray-800">
                   <div className="max-w-4xl mx-auto flex space-x-4">
                     <div className="w-8 h-8 flex-shrink-0"></div>
