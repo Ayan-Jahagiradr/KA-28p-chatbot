@@ -14,11 +14,7 @@ declare global {
   }
 }
 
-interface ApiKeyPromptProps {
-  onKeySelected: () => void;
-}
-
-const ApiKeyPrompt: React.FC<ApiKeyPromptProps> = ({ onKeySelected }) => {
+const ApiKeyPrompt: React.FC = () => {
   const handleSelectKey = async () => {
     if (!window.aistudio) {
       console.error('aistudio context not available.');
@@ -27,7 +23,8 @@ const ApiKeyPrompt: React.FC<ApiKeyPromptProps> = ({ onKeySelected }) => {
     }
     try {
       await window.aistudio.openSelectKey();
-      onKeySelected();
+      // Reload the page to ensure the new API key is loaded into the environment.
+      window.location.reload();
     } catch (e) {
       console.error('Error opening API key selection:', e);
       alert('An error occurred while trying to select an API key.');

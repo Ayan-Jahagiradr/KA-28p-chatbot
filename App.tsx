@@ -1,13 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import { Chat } from '@google/genai';
 
 import { useAuth } from './contexts/AuthContext';
 import { useTheme } from './hooks/useTheme';
 import { useSpeechRecognition } from './hooks/useSpeechRecognition';
 import { ChatSession, Message, MessageRole } from './types';
 import {
-  createNewGeminiChat,
   sendMessageStream,
   getTitleForChat,
 } from './services/geminiService';
@@ -19,43 +17,24 @@ import MicrophoneIcon from './components/icons/MicrophoneIcon';
 import LoadingDots from './components/LoadingDots';
 import MenuIcon from './components/icons/MenuIcon';
 import WelcomeScreen from './components/WelcomeScreen';
-import ApiKeyPrompt from './components/ApiKeyPrompt';
+import ConfirmationModal from './components/ConfirmationModal';
 
 const App: React.FC = () => {
   const { isLoading: isAuthLoading } = useAuth();
   const [theme, toggleTheme] = useTheme();
-
-  const [hasApiKey, setHasApiKey] = useState(false);
-  const [isApiKeyLoading, setIsApiKeyLoading] = useState(true);
 
   const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [sessionToDelete, setSessionToDelete] = useState<string | null>(null);
 
-  const geminiChat = useRef<Chat | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const activeSession = chatSessions.find(
     (session) => session.id === activeSessionId,
   );
-
-  useEffect(() => {
-    const checkApiKey = async () => {
-      if (window.aistudio) {
-        try {
-          const keyStatus = await window.aistudio.hasSelectedApiKey();
-          setHasApiKey(keyStatus);
-        } catch (e) {
-          console.error('Error checking for API key:', e);
-          setHasApiKey(false);
-        }
-      }
-      setIsApiKeyLoading(false);
-    };
-    checkApiKey();
-  }, []);
 
   const updateSessionMessages = useCallback(
     (sessionId: string, updateFn: (messages: Message[]) => Message[]) => {
@@ -71,15 +50,10 @@ const App: React.FC = () => {
   );
 
   const createNewChat = useCallback(() => {
-    if (activeSessionId === null) {
-      setIsSidebarOpen(false);
-      return;
-    }
     setActiveSessionId(null);
     setInput('');
-    geminiChat.current = createNewGeminiChat();
     setIsSidebarOpen(false);
-  }, [activeSessionId]);
+  }, []);
 
   // Load sessions from localStorage on mount
   useEffect(() => {
@@ -179,8 +153,7 @@ const App: React.FC = () => {
       ]);
 
       try {
-        geminiChat.current = createNewGeminiChat(sessionHistory);
-        const stream = sendMessageStream(geminiChat.current, messageContent);
+        const stream = sendMessageStream(sessionHistory, messageContent);
 
         let lastFullResponse = '';
         for await (const chunk of stream) {
@@ -208,16 +181,6 @@ const App: React.FC = () => {
         }
       } catch (error) {
         console.error(error);
-        if (
-          error instanceof Error &&
-          (error.message.includes('API key not valid') ||
-            error.message.includes('An API Key must be set'))
-        ) {
-          console.error(
-            'API key not valid. Prompting for a new key.',
-          );
-          setHasApiKey(false); // Re-trigger the API key prompt
-        }
         const errorMessage: Message = {
           role: MessageRole.ERROR,
           content: 'Sorry, something went wrong. Please try again.',
@@ -241,16 +204,26 @@ const App: React.FC = () => {
     setIsSidebarOpen(false);
   };
 
-  const deleteChat = (id: string) => {
-    const remainingSessions = chatSessions.filter((s) => s.id !== id);
+  const requestDeleteChat = (id: string) => {
+    setSessionToDelete(id);
+  };
+
+  const confirmDeleteChat = () => {
+    if (!sessionToDelete) return;
+    const remainingSessions = chatSessions.filter((s) => s.id !== sessionToDelete);
     setChatSessions(remainingSessions);
-    if (activeSessionId === id) {
+    if (activeSessionId === sessionToDelete) {
       if (remainingSessions.length > 0) {
         setActiveSessionId(remainingSessions[0].id);
       } else {
         setActiveSessionId(null);
       }
     }
+    setSessionToDelete(null);
+  };
+
+  const cancelDeleteChat = () => {
+    setSessionToDelete(null);
   };
 
   const onCommand = useCallback(
@@ -280,7 +253,7 @@ const App: React.FC = () => {
     }
   }, [transcript]);
 
-  if (isAuthLoading || isApiKeyLoading) {
+  if (isAuthLoading) {
     return (
       <div className="flex items-center justify-center h-screen bg-white dark:bg-gray-900">
         <LoadingDots />
@@ -288,12 +261,10 @@ const App: React.FC = () => {
     );
   }
 
-  if (!hasApiKey) {
-    return <ApiKeyPrompt onKeySelected={() => setHasApiKey(true)} />;
-  }
-
   const lastMessage =
     activeSession?.messages[activeSession.messages.length - 1];
+  
+  const sessionToDeleteDetails = chatSessions.find(s => s.id === sessionToDelete);
 
   return (
     <div className="flex h-screen bg-white dark:bg-gray-900 font-sans">
@@ -302,12 +273,25 @@ const App: React.FC = () => {
         activeSessionId={activeSessionId}
         onNewChat={createNewChat}
         onSelectChat={selectChat}
-        onDeleteChat={deleteChat}
+        onDeleteChat={requestDeleteChat}
         theme={theme}
         toggleTheme={toggleTheme}
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
       />
+      
+      <ConfirmationModal
+        isOpen={!!sessionToDelete}
+        onClose={cancelDeleteChat}
+        onConfirm={confirmDeleteChat}
+        title="Delete Chat"
+      >
+        <p>
+          Are you sure you want to delete the chat "
+          <span className="font-semibold">{sessionToDeleteDetails?.title}</span>"? This action cannot be undone.
+        </p>
+      </ConfirmationModal>
+
 
       <main className="flex-1 flex flex-col h-screen">
         <header className="flex items-center p-4 border-b border-gray-200 dark:border-gray-700 md:hidden">
