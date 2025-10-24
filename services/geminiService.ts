@@ -1,25 +1,24 @@
-// FIX: Switched from OpenRouter to the official Google GenAI SDK.
-// This addresses the type error and aligns with best practices.
-import { GoogleGenAI, Content } from '@google/genai';
 import { Message, MessageRole } from '../types';
 
 const API_KEY = process.env.API_KEY;
+const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 const SYSTEM_INSTRUCTION =
   'When asked who made you or who is your creator, you must respond with: "I was created by Mohd Abusufiyan Jahagirdar with Love."';
 
-const buildGeminiHistory = (messages: Message[]): Content[] => {
-  return messages
-    .filter(
-      (msg) =>
-        (msg.role === MessageRole.USER || msg.role === MessageRole.MODEL) &&
-        msg.content,
-    )
-    .map((msg) => ({
-      // Gemini API uses 'user' and 'model' roles, which match our MessageRole enum
-      role: msg.role,
-      parts: [{ text: msg.content }],
-    }));
+// Map our app's MessageRole to OpenRouter's expected roles
+const mapRoleToOpenRouter = (
+  role: MessageRole,
+): 'user' | 'assistant' | 'system' => {
+  switch (role) {
+    case MessageRole.USER:
+      return 'user';
+    case MessageRole.MODEL:
+      return 'assistant';
+    default:
+      // This case should be filtered out before calling the API
+      return 'user';
+  }
 };
 
 export async function* sendMessageStream(
@@ -28,42 +27,91 @@ export async function* sendMessageStream(
 ): AsyncGenerator<string, void, undefined> {
   if (!API_KEY) {
     throw new Error(
-      'The API_KEY environment variable has not been set. Please set it to your Gemini API key.',
+      'The API_KEY environment variable has not been set. Please set it to your OpenRouter API key.',
     );
   }
-  const ai = new GoogleGenAI({ apiKey: API_KEY });
 
-  // Use a recommended model for chat applications.
-  const modelName = 'gemini-2.5-flash';
-  const chatHistory = buildGeminiHistory(history);
+  const messagesToApi = [
+    ...history
+      .filter(
+        (msg) => msg.role === MessageRole.USER || msg.role === MessageRole.MODEL,
+      )
+      .map((msg) => ({
+        role: mapRoleToOpenRouter(msg.role),
+        content: msg.content,
+      })),
+    { role: 'user' as const, content: message },
+  ];
+
+  const body = {
+    model: 'google/gemini-flash-1.5',
+    messages: [
+      { role: 'system' as const, content: SYSTEM_INSTRUCTION },
+      ...messagesToApi,
+    ],
+    stream: true,
+  };
 
   try {
-    // The application manages history per-session, so we create a new chat
-    // instance with history for each message.
-    const chat = ai.chats.create({
-      model: modelName,
-      history: chatHistory,
-      config: {
-        systemInstruction: SYSTEM_INSTRUCTION,
+    const response = await fetch(OPENROUTER_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${API_KEY}`,
       },
+      body: JSON.stringify(body),
     });
 
-    const result = await chat.sendMessageStream({ message });
+    if (!response.ok || !response.body) {
+      const errorText = await response.text();
+      console.error('OpenRouter API Error:', errorText);
+      throw new Error(
+        `API request failed: ${response.statusText} - ${errorText}`,
+      );
+    }
 
-    let fullResponse = '';
-    for await (const chunk of result) {
-      // The UI expects the full response text on each stream event, so we accumulate it.
-      if (chunk.text) {
-        fullResponse += chunk.text;
-        yield fullResponse;
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let accumulatedResponse = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+      const chunk = decoder.decode(value, { stream: true });
+      const lines = chunk.split('\n');
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          const dataString = line.substring(6);
+          if (dataString === '[DONE]') {
+            return;
+          }
+          try {
+            const data = JSON.parse(dataString);
+            const content = data.choices[0]?.delta?.content;
+            if (content) {
+              accumulatedResponse += content;
+              yield accumulatedResponse;
+            }
+          } catch (e) {
+            console.error(
+              'Error parsing stream data:',
+              e,
+              'Data:',
+              dataString,
+            );
+          }
+        }
       }
     }
   } catch (error) {
-    console.error('Gemini API Error:', error);
+    console.error('Streaming Error:', error);
     if (error instanceof Error) {
-      throw new Error(`API request failed: ${error.message}`);
+      throw new Error(`Streaming failed: ${error.message}`);
     }
-    throw new Error(`An unknown API error occurred.`);
+    throw new Error('An unknown streaming error occurred.');
   }
 }
 
@@ -76,7 +124,6 @@ export const getTitleForChat = async (messages: Message[]): Promise<string> => {
     console.error('API_KEY is not set for getTitleForChat');
     return 'New Chat';
   }
-  const ai = new GoogleGenAI({ apiKey: API_KEY });
 
   const conversationForTitle = messages
     .map((msg) => `${msg.role}: ${msg.content}`)
@@ -84,14 +131,31 @@ export const getTitleForChat = async (messages: Message[]): Promise<string> => {
 
   const prompt = `Generate a short, concise title for this chat (max 5 words), based on this conversation:\n\n${conversationForTitle}\n\nDo not use quotes in the title.`;
 
+  const body = {
+    model: 'mistralai/mistral-7b-instruct:free',
+    messages: [{ role: 'user' as const, content: prompt }],
+  };
+
   try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: prompt,
+    const response = await fetch(OPENROUTER_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${API_KEY}`,
+      },
+      body: JSON.stringify(body),
     });
 
-    // Use response.text to get the content as per Gemini API guidelines.
-    let title = response.text.trim().replace(/["'*]/g, '');
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(
+        `API request failed: ${response.statusText} - ${errorText}`,
+      );
+    }
+
+    const data = await response.json();
+    const title = data.choices[0]?.message?.content?.trim().replace(/["'*]/g, '');
+
     return title || 'New Chat';
   } catch (error) {
     console.error('Error generating title:', error);

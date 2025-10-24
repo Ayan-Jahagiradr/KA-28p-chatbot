@@ -1,67 +1,7 @@
 import React from 'react';
 
-// Fix: To resolve a TypeScript error with conflicting global declarations,
-// an `AIStudio` interface is declared globally and used on the `Window`
-// object. This allows for merging with other potential declarations.
-declare global {
-  interface AIStudio {
-    hasSelectedApiKey: () => Promise<boolean>;
-    openSelectKey: () => Promise<void>;
-  }
-
-  interface Window {
-    aistudio?: AIStudio;
-  }
-}
-
-const ApiKeyPrompt: React.FC = () => {
-  const handleSelectKey = async () => {
-    if (!window.aistudio) {
-      console.error('aistudio context not available.');
-      alert('API key selection is not available in this environment.');
-      return;
-    }
-    try {
-      await window.aistudio.openSelectKey();
-      // Reload the page to ensure the new API key is loaded into the environment.
-      window.location.reload();
-    } catch (e) {
-      console.error('Error opening API key selection:', e);
-      alert('An error occurred while trying to select an API key.');
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-lg p-8 w-full max-w-md text-center shadow-2xl">
-        <h2 className="text-2xl font-bold mb-4 text-gray-900 dark:text-white">
-          Select API Key
-        </h2>
-        <p className="text-gray-600 dark:text-gray-300 mb-6">
-          To continue, please select a Gemini API key. Your key is securely
-          managed and used to access the Gemini API.
-        </p>
-        <button
-          onClick={handleSelectKey}
-          className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-lg focus:outline-none focus:shadow-outline w-full text-lg transition-colors"
-        >
-          Choose API Key
-        </button>
-        <p className="text-xs text-gray-500 dark:text-gray-400 mt-4">
-          For information about API keys and billing, please visit{' '}
-          <a
-            href="https://ai.google.dev/gemini-api/docs/billing"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-blue-500 hover:underline"
-          >
-            ai.google.dev/gemini-api/docs/billing
-          </a>
-          .
-        </p>
-      </div>
-    </div>
-  );
-};
+// This component is no longer used with OpenRouter and has been neutralized
+// to prevent errors in environments where `window.aistudio` is not available.
+const ApiKeyPrompt: React.FC = () => null;
 
 export default ApiKeyPrompt;
