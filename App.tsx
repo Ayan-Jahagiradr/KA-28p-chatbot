@@ -19,10 +19,14 @@ import MicrophoneIcon from './components/icons/MicrophoneIcon';
 import LoadingDots from './components/LoadingDots';
 import MenuIcon from './components/icons/MenuIcon';
 import WelcomeScreen from './components/WelcomeScreen';
+import ApiKeyPrompt from './components/ApiKeyPrompt';
 
 const App: React.FC = () => {
   const { isLoading: isAuthLoading } = useAuth();
   const [theme, toggleTheme] = useTheme();
+
+  const [hasApiKey, setHasApiKey] = useState(false);
+  const [isApiKeyLoading, setIsApiKeyLoading] = useState(true);
 
   const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
@@ -36,6 +40,22 @@ const App: React.FC = () => {
   const activeSession = chatSessions.find(
     (session) => session.id === activeSessionId,
   );
+
+  useEffect(() => {
+    const checkApiKey = async () => {
+      if (window.aistudio) {
+        try {
+          const keyStatus = await window.aistudio.hasSelectedApiKey();
+          setHasApiKey(keyStatus);
+        } catch (e) {
+          console.error('Error checking for API key:', e);
+          setHasApiKey(false);
+        }
+      }
+      setIsApiKeyLoading(false);
+    };
+    checkApiKey();
+  }, []);
 
   const updateSessionMessages = useCallback(
     (sessionId: string, updateFn: (messages: Message[]) => Message[]) => {
@@ -190,11 +210,13 @@ const App: React.FC = () => {
         console.error(error);
         if (
           error instanceof Error &&
-          error.message.includes('API key not valid')
+          (error.message.includes('API key not valid') ||
+            error.message.includes('An API Key must be set'))
         ) {
           console.error(
-            'API key not valid. Please check your environment configuration.',
+            'API key not valid. Prompting for a new key.',
           );
+          setHasApiKey(false); // Re-trigger the API key prompt
         }
         const errorMessage: Message = {
           role: MessageRole.ERROR,
@@ -258,12 +280,16 @@ const App: React.FC = () => {
     }
   }, [transcript]);
 
-  if (isAuthLoading) {
+  if (isAuthLoading || isApiKeyLoading) {
     return (
       <div className="flex items-center justify-center h-screen bg-white dark:bg-gray-900">
         <LoadingDots />
       </div>
     );
+  }
+
+  if (!hasApiKey) {
+    return <ApiKeyPrompt onKeySelected={() => setHasApiKey(true)} />;
   }
 
   const lastMessage =
