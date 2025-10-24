@@ -14,8 +14,3 @@ export interface ChatSession {
   title: string;
   messages: Message[];
 }
-
-export interface Credentials {
-  email: string;
-  password: string;
-}

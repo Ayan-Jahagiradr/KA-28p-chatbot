@@ -8,7 +8,7 @@ import { ChatSession, Message, MessageRole } from './types';
 import {
   sendMessageStream,
   getTitleForChat,
-} from './services/geminiService';
+} from './services/openRouterService'; // Note: File content is now for Groq
 
 import Sidebar from './components/Sidebar';
 import ChatMessage from './components/ChatMessage';
@@ -181,9 +181,13 @@ const App: React.FC = () => {
         }
       } catch (error) {
         console.error(error);
+        const errorMessageContent =
+          error instanceof Error
+            ? error.message
+            : 'Sorry, something went wrong. Please check your API key and try again.';
         const errorMessage: Message = {
           role: MessageRole.ERROR,
-          content: 'Sorry, something went wrong. Please try again.',
+          content: errorMessageContent,
         };
         updateSessionMessages(finalSessionId, (messages) => {
           const newMessages = [...messages];

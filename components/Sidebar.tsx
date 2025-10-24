@@ -101,10 +101,11 @@ const Sidebar: React.FC<SidebarProps> = ({
         <div className="p-4 border-t border-gray-200 dark:border-gray-700">
           <div className="flex items-center justify-end">
             <button
-                onClick={toggleTheme}
-                className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700"
+              onClick={toggleTheme}
+              className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700"
+              aria-label="Toggle theme"
             >
-                {theme === 'light' ? <MoonIcon /> : <SunIcon />}
+              {theme === 'light' ? <MoonIcon /> : <SunIcon />}
             </button>
           </div>
         </div>

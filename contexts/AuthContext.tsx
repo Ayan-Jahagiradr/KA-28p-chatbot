@@ -3,17 +3,19 @@ import React, {
   useContext,
   ReactNode,
 } from 'react';
-import {
-  User,
-} from 'firebase/auth';
-import { Credentials } from '../types';
+
+// Local User type to avoid Firebase dependency
+interface User {
+  uid: string;
+  email: string | null;
+}
 
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   signOutUser: () => Promise<void>;
-  signUpWithEmailPassword: (credentials: Credentials) => Promise<void>;
-  signInWithEmailPassword: (credentials: Credentials) => Promise<void>;
+  signUpWithEmailPassword: (credentials: any) => Promise<void>;
+  signInWithEmailPassword: (credentials: any) => Promise<void>;
   error: string | null;
 }
 
@@ -23,9 +25,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const mockUser: User = {
   uid: 'local-user',
   email: 'local-user@app.com',
-  // The User type from firebase is complex, but we only use uid and email.
-  // Casting a partial object to User satisfies the type checker.
-} as User;
+};
 
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({
@@ -37,10 +37,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
     signOutUser: async () => {
       // No-op, authentication is disabled.
     },
-    signUpWithEmailPassword: async (_: Credentials) => {
+    signUpWithEmailPassword: async (_: any) => {
       // No-op, authentication is disabled.
     },
-    signInWithEmailPassword: async (_: Credentials) => {
+    signInWithEmailPassword: async (_: any) => {
       // No-op, authentication is disabled.
     },
     error: null,
