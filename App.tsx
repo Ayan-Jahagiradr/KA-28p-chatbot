@@ -14,16 +14,14 @@ import {
 
 import Sidebar from './components/Sidebar';
 import ChatMessage from './components/ChatMessage';
-import AuthModal from './components/AuthModal';
 import SendIcon from './components/icons/SendIcon';
 import MicrophoneIcon from './components/icons/MicrophoneIcon';
 import LoadingDots from './components/LoadingDots';
 import MenuIcon from './components/icons/MenuIcon';
 import WelcomeScreen from './components/WelcomeScreen';
-import ApiKeyPrompt from './components/ApiKeyPrompt';
 
 const App: React.FC = () => {
-  const { user, isLoading: isAuthLoading } = useAuth();
+  const { isLoading: isAuthLoading } = useAuth();
   const [theme, toggleTheme] = useTheme();
 
   const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
@@ -32,41 +30,12 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
-  const [hasApiKey, setHasApiKey] = useState(false);
-  const [isCheckingApiKey, setIsCheckingApiKey] = useState(true);
-
   const geminiChat = useRef<Chat | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const activeSession = chatSessions.find(
     (session) => session.id === activeSessionId,
   );
-
-  useEffect(() => {
-    if (!user) {
-      setIsCheckingApiKey(false);
-      setHasApiKey(false); // Reset on logout
-      return;
-    }
-
-    const checkApiKey = async () => {
-      setIsCheckingApiKey(true);
-      try {
-        if (window.aistudio && (await window.aistudio.hasSelectedApiKey())) {
-          setHasApiKey(true);
-        } else {
-          setHasApiKey(false);
-        }
-      } catch (e) {
-        console.error('Error checking for API key:', e);
-        setHasApiKey(false);
-      } finally {
-        setIsCheckingApiKey(false);
-      }
-    };
-
-    checkApiKey();
-  }, [user]);
 
   const updateSessionMessages = useCallback(
     (sessionId: string, updateFn: (messages: Message[]) => Message[]) => {
@@ -94,63 +63,48 @@ const App: React.FC = () => {
 
   // Load sessions from localStorage on mount
   useEffect(() => {
-    if (user) {
-      let loadedSessions: ChatSession[] = [];
-      try {
-        const savedSessionsJSON = localStorage.getItem(
-          `chatSessions_${user.uid}`,
-        );
-        if (savedSessionsJSON) {
-          loadedSessions = JSON.parse(savedSessionsJSON);
-        }
-      } catch (e) {
-        console.error('Failed to parse chat sessions from localStorage', e);
-        loadedSessions = [];
+    let loadedSessions: ChatSession[] = [];
+    try {
+      const savedSessionsJSON = localStorage.getItem('chatSessions');
+      if (savedSessionsJSON) {
+        loadedSessions = JSON.parse(savedSessionsJSON);
       }
+    } catch (e) {
+      console.error('Failed to parse chat sessions from localStorage', e);
+      loadedSessions = [];
+    }
 
-      setChatSessions(loadedSessions);
+    setChatSessions(loadedSessions);
 
-      if (loadedSessions.length > 0) {
-        const savedActiveId = localStorage.getItem(
-          `activeSessionId_${user.uid}`,
-        );
-        if (
-          savedActiveId &&
-          loadedSessions.some((s) => s.id === savedActiveId)
-        ) {
-          setActiveSessionId(savedActiveId);
-        } else {
-          setActiveSessionId(loadedSessions[0].id);
-        }
+    if (loadedSessions.length > 0) {
+      const savedActiveId = localStorage.getItem('activeSessionId');
+      if (
+        savedActiveId &&
+        loadedSessions.some((s) => s.id === savedActiveId)
+      ) {
+        setActiveSessionId(savedActiveId);
       } else {
-        setActiveSessionId(null);
+        setActiveSessionId(loadedSessions[0].id);
       }
     } else {
-      setChatSessions([]);
       setActiveSessionId(null);
     }
-  }, [user]);
+  }, []);
 
   // Save sessions to localStorage
   useEffect(() => {
-    if (user) {
-      if (chatSessions.length > 0) {
-        localStorage.setItem(
-          `chatSessions_${user.uid}`,
-          JSON.stringify(chatSessions),
-        );
-        if (activeSessionId) {
-          localStorage.setItem(`activeSessionId_${user.uid}`, activeSessionId);
-        } else {
-          // In 'new chat' state, remove saved active ID so reload goes to last used chat
-          localStorage.removeItem(`activeSessionId_${user.uid}`);
-        }
+    if (chatSessions.length > 0) {
+      localStorage.setItem('chatSessions', JSON.stringify(chatSessions));
+      if (activeSessionId) {
+        localStorage.setItem('activeSessionId', activeSessionId);
       } else {
-        localStorage.removeItem(`chatSessions_${user.uid}`);
-        localStorage.removeItem(`activeSessionId_${user.uid}`);
+        localStorage.removeItem('activeSessionId');
       }
+    } else {
+      localStorage.removeItem('chatSessions');
+      localStorage.removeItem('activeSessionId');
     }
-  }, [chatSessions, activeSessionId, user]);
+  }, [chatSessions, activeSessionId]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -234,9 +188,13 @@ const App: React.FC = () => {
         }
       } catch (error) {
         console.error(error);
-        if (error instanceof Error && error.message.includes("API key not valid")) {
-            setHasApiKey(false);
-            // Optionally clear the invalid key state if window.aistudio supports it
+        if (
+          error instanceof Error &&
+          error.message.includes('API key not valid')
+        ) {
+          console.error(
+            'API key not valid. Please check your environment configuration.',
+          );
         }
         const errorMessage: Message = {
           role: MessageRole.ERROR,
@@ -300,7 +258,7 @@ const App: React.FC = () => {
     }
   }, [transcript]);
 
-  if (isAuthLoading || isCheckingApiKey) {
+  if (isAuthLoading) {
     return (
       <div className="flex items-center justify-center h-screen bg-white dark:bg-gray-900">
         <LoadingDots />
@@ -308,15 +266,8 @@ const App: React.FC = () => {
     );
   }
 
-  if (!user) {
-    return <AuthModal />;
-  }
-  
-  if (!hasApiKey) {
-    return <ApiKeyPrompt onKeySelected={() => setHasApiKey(true)} />;
-  }
-
-  const lastMessage = activeSession?.messages[activeSession.messages.length - 1];
+  const lastMessage =
+    activeSession?.messages[activeSession.messages.length - 1];
 
   return (
     <div className="flex h-screen bg-white dark:bg-gray-900 font-sans">

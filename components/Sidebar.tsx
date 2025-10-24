@@ -3,7 +3,6 @@ import { ChatSession } from '../types';
 import NewChatIcon from './icons/NewChatIcon';
 import SunIcon from './icons/SunIcon';
 import MoonIcon from './icons/MoonIcon';
-import { useAuth } from '../contexts/AuthContext';
 import CloseIcon from './icons/CloseIcon';
 
 interface SidebarProps {
@@ -29,8 +28,6 @@ const Sidebar: React.FC<SidebarProps> = ({
   isOpen,
   onClose,
 }) => {
-  const { signOutUser, user } = useAuth();
-
   return (
     <>
       <div
@@ -102,10 +99,7 @@ const Sidebar: React.FC<SidebarProps> = ({
         </nav>
 
         <div className="p-4 border-t border-gray-200 dark:border-gray-700">
-          <div className="flex items-center justify-between mb-4">
-            <div className="text-sm overflow-hidden">
-                <p className="font-semibold truncate" title={user?.email || ''}>{user?.email}</p>
-            </div>
+          <div className="flex items-center justify-end">
             <button
                 onClick={toggleTheme}
                 className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700"
@@ -113,13 +107,6 @@ const Sidebar: React.FC<SidebarProps> = ({
                 {theme === 'light' ? <MoonIcon /> : <SunIcon />}
             </button>
           </div>
-
-          <button
-            onClick={signOutUser}
-            className="w-full text-left p-2 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700"
-          >
-            Log Out
-          </button>
         </div>
       </aside>
     </>
