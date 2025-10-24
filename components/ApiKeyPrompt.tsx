@@ -1,14 +1,14 @@
 import React from 'react';
 
-// Fix: Defined the AIStudio interface to resolve a TypeScript error about conflicting global declarations for `window.aistudio`.
-interface AIStudio {
-  hasSelectedApiKey: () => Promise<boolean>;
-  openSelectKey: () => Promise<void>;
-}
-
+// Fix: To resolve a TypeScript error with conflicting global declarations,
+// the `aistudio` object shape is defined directly on the `Window` interface
+// instead of using a separate, module-scoped interface.
 declare global {
   interface Window {
-    aistudio?: AIStudio;
+    aistudio?: {
+      hasSelectedApiKey: () => Promise<boolean>;
+      openSelectKey: () => Promise<void>;
+    };
   }
 }
 

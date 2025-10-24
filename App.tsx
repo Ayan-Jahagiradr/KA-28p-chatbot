@@ -156,14 +156,6 @@ const App: React.FC = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [activeSession?.messages, isLoading]);
 
-  useEffect(() => {
-    if (activeSession) {
-      geminiChat.current = createNewGeminiChat(activeSession.messages);
-    } else {
-      geminiChat.current = createNewGeminiChat();
-    }
-  }, [activeSession]);
-
   const handleSendMessage = useCallback(
     async (messageContent: string) => {
       if (!messageContent.trim() || isLoading) return;
@@ -213,9 +205,7 @@ const App: React.FC = () => {
       ]);
 
       try {
-        if (!geminiChat.current || isNewSession) {
-          geminiChat.current = createNewGeminiChat(sessionHistory);
-        }
+        geminiChat.current = createNewGeminiChat(sessionHistory);
         const stream = sendMessageStream(geminiChat.current, messageContent);
 
         let lastFullResponse = '';
@@ -244,6 +234,10 @@ const App: React.FC = () => {
         }
       } catch (error) {
         console.error(error);
+        if (error instanceof Error && error.message.includes("API key not valid")) {
+            setHasApiKey(false);
+            // Optionally clear the invalid key state if window.aistudio supports it
+        }
         const errorMessage: Message = {
           role: MessageRole.ERROR,
           content: 'Sorry, something went wrong. Please try again.',
