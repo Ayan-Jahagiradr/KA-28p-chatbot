@@ -1,6 +1,6 @@
 import { Message, MessageRole } from '../types';
 
-const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
+const GROQ_API_URL = 'https://api.groq.com/openai/v1';
 
 const getApiKey = () => process.env.GROQ_API_KEY;
 
