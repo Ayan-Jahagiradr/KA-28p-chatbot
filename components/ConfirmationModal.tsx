@@ -1,13 +1,23 @@
+
 import React from 'react';
 
 interface ConfirmationModalProps {
+  /** Whether the modal is currently visible. */
   isOpen: boolean;
+  /** Function to call when the modal is closed (e.g., by clicking the overlay or cancel button). */
   onClose: () => void;
+  /** Function to call when the user confirms the action. */
   onConfirm: () => void;
+  /** The title of the modal dialog. */
   title: string;
+  /** The content/body of the modal, typically a description of the action. */
   children: React.ReactNode;
 }
 
+/**
+ * A reusable modal dialog component for confirming destructive actions,
+ * such as deleting a chat session.
+ */
 const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
   isOpen,
   onClose,
@@ -27,7 +37,7 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
     >
       <div
         className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-sm text-center shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()} // Prevent closing modal when clicking inside it
       >
         <h2
           id="confirmation-modal-title"

@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { ChatSession } from '../types';
 import NewChatIcon from './icons/NewChatIcon';
@@ -17,6 +18,12 @@ interface SidebarProps {
   onClose: () => void;
 }
 
+/**
+ * Renders the sidebar navigation panel.
+ * It displays a list of chat sessions, allows creating new chats,
+ * and contains controls for theme switching. It is responsive and
+ * can be toggled on mobile devices.
+ */
 const Sidebar: React.FC<SidebarProps> = ({
   chatSessions,
   activeSessionId,
@@ -30,6 +37,7 @@ const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   return (
     <>
+      {/* Overlay for mobile view */}
       <div
         className={`fixed inset-0 bg-gray-900 bg-opacity-50 z-30 md:hidden transition-opacity ${
           isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
@@ -71,9 +79,10 @@ const Sidebar: React.FC<SidebarProps> = ({
               >
                 {session.title}
               </button>
+              {/* Delete button appears on hover */}
               <button
                 onClick={(e) => {
-                  e.stopPropagation();
+                  e.stopPropagation(); // Prevent selecting the chat when clicking delete
                   onDeleteChat(session.id);
                 }}
                 className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-full text-gray-500 hover:bg-gray-300 dark:hover:bg-gray-600 opacity-0 group-hover:opacity-100"

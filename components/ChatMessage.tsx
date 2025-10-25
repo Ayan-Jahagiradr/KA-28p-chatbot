@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { Message, MessageRole } from '../types';
@@ -7,9 +8,16 @@ import CopyIcon from './icons/CopyIcon';
 import CheckIcon from './icons/CheckIcon';
 
 interface ChatMessageProps {
+  /** The message object to display. */
   message: Message;
 }
 
+/**
+ * Renders a single message in the chat interface.
+ * It handles different styles for user, model, and error messages,
+ * supports Markdown rendering for model responses, and includes a
+ * copy-to-clipboard feature for model messages.
+ */
 const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
   const { role, content } = message;
   const [isCopied, setIsCopied] = useState(false);
@@ -28,6 +36,9 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
     ? 'text-red-500'
     : 'text-gray-800 dark:text-gray-100';
 
+  /**
+   * Copies the message content to the user's clipboard and provides visual feedback.
+   */
   const handleCopy = () => {
     if (!content) return;
     navigator.clipboard
@@ -52,6 +63,7 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
         <div
           className={`prose dark:prose-invert max-w-none ${textColor} flex-grow transition-colors duration-300 relative`}
         >
+          {/* Show copy button only for non-empty model messages */}
           {isModel && content && (
             <button
               onClick={handleCopy}
@@ -63,6 +75,7 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
               {isCopied ? <CheckIcon /> : <CopyIcon />}
             </button>
           )}
+          {/* Render content as plain text for errors, or as Markdown for user/model messages */}
           {isError ? (
             <p>{content}</p>
           ) : (

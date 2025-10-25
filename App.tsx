@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -8,7 +9,7 @@ import { ChatSession, Message, MessageRole } from './types';
 import {
   sendMessageStream,
   getTitleForChat,
-} from './services/openRouterService'; // Note: File content is now for Groq
+} from './services/groqService'; 
 
 import Sidebar from './components/Sidebar';
 import ChatMessage from './components/ChatMessage';
@@ -19,23 +20,44 @@ import MenuIcon from './components/icons/MenuIcon';
 import WelcomeScreen from './components/WelcomeScreen';
 import ConfirmationModal from './components/ConfirmationModal';
 
+/**
+ * The main application component. It manages the entire application state,
+ * including chat sessions, user input, and UI interactions.
+ */
 const App: React.FC = () => {
+  // --- HOOKS ---
   const { isLoading: isAuthLoading } = useAuth();
   const [theme, toggleTheme] = useTheme();
 
+  // --- STATE MANAGEMENT ---
+  // All chat sessions, including their messages and titles.
   const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
+  // The ID of the currently active chat session. Null indicates a new, unsaved chat.
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  // The current content of the user input textarea.
   const [input, setInput] = useState('');
+  // A boolean flag to indicate if the AI is currently generating a response.
   const [isLoading, setIsLoading] = useState(false);
+  // Controls the visibility of the sidebar on mobile devices.
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  // Holds the ID of the session that the user has requested to delete, pending confirmation.
   const [sessionToDelete, setSessionToDelete] = useState<string | null>(null);
 
+  // A ref to the end of the messages list to enable auto-scrolling.
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // --- DERIVED STATE ---
+  // Finds the active chat session object from the sessions array.
   const activeSession = chatSessions.find(
     (session) => session.id === activeSessionId,
   );
-
+  
+  /**
+   * A memoized utility function to update the messages of a specific chat session.
+   * This helps prevent unnecessary re-renders.
+   * @param sessionId The ID of the session to update.
+   * @param updateFn A function that receives the current messages and returns the updated messages.
+   */
   const updateSessionMessages = useCallback(
     (sessionId: string, updateFn: (messages: Message[]) => Message[]) => {
       setChatSessions((prevSessions) =>
@@ -49,13 +71,18 @@ const App: React.FC = () => {
     [],
   );
 
+  /**
+   * Resets the UI state to start a new chat conversation.
+   */
   const createNewChat = useCallback(() => {
     setActiveSessionId(null);
     setInput('');
     setIsSidebarOpen(false);
   }, []);
 
-  // Load sessions from localStorage on mount
+  // --- EFFECTS ---
+
+  // Load chat sessions and the last active session ID from localStorage on initial component mount.
   useEffect(() => {
     let loadedSessions: ChatSession[] = [];
     try {
@@ -78,6 +105,7 @@ const App: React.FC = () => {
       ) {
         setActiveSessionId(savedActiveId);
       } else {
+        // Default to the most recent session if the saved one is invalid.
         setActiveSessionId(loadedSessions[0].id);
       }
     } else {
@@ -85,7 +113,7 @@ const App: React.FC = () => {
     }
   }, []);
 
-  // Save sessions to localStorage
+  // Save chat sessions and the active session ID to localStorage whenever they change.
   useEffect(() => {
     if (chatSessions.length > 0) {
       localStorage.setItem('chatSessions', JSON.stringify(chatSessions));
@@ -95,15 +123,23 @@ const App: React.FC = () => {
         localStorage.removeItem('activeSessionId');
       }
     } else {
+      // Clean up localStorage if there are no sessions left.
       localStorage.removeItem('chatSessions');
       localStorage.removeItem('activeSessionId');
     }
   }, [chatSessions, activeSessionId]);
 
+  // Automatically scroll to the latest message when the chat updates.
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [activeSession?.messages, isLoading]);
 
+  // --- CORE LOGIC ---
+
+  /**
+   * Handles the entire process of sending a user message and receiving a streamed response from the AI.
+   * @param messageContent The text content of the message to send.
+   */
   const handleSendMessage = useCallback(
     async (messageContent: string) => {
       if (!messageContent.trim() || isLoading) return;
@@ -115,6 +151,7 @@ const App: React.FC = () => {
       let isNewSession = false;
       let sessionHistory: Message[] = [];
 
+      // 1. Determine if this is a new chat or an existing one.
       if (sessionId === null) {
         isNewSession = true;
         const newSession: ChatSession = {
@@ -122,6 +159,7 @@ const App: React.FC = () => {
           title: 'New Chat',
           messages: [],
         };
+        // Add the new session to the top of the list.
         setChatSessions((prev) => [newSession, ...prev]);
         sessionId = newSession.id;
         setActiveSessionId(newSession.id);
@@ -140,6 +178,7 @@ const App: React.FC = () => {
       }
       const finalSessionId = sessionId;
 
+      // 2. Add the user's message and a placeholder for the model's response to the UI.
       const userMessage: Message = {
         role: MessageRole.USER,
         content: messageContent,
@@ -153,9 +192,11 @@ const App: React.FC = () => {
       ]);
 
       try {
+        // 3. Call the API service to get a streamed response.
         const stream = sendMessageStream(sessionHistory, messageContent);
 
         let lastFullResponse = '';
+        // 4. Update the UI with each chunk of the response as it arrives.
         for await (const chunk of stream) {
           lastFullResponse = chunk;
           updateSessionMessages(finalSessionId, (messages) => {
@@ -167,6 +208,7 @@ const App: React.FC = () => {
           });
         }
 
+        // 5. If it was a new session, generate and set a title for it.
         if (isNewSession) {
           const finalMessagesForTitle = [
             userMessage,
@@ -180,6 +222,7 @@ const App: React.FC = () => {
           );
         }
       } catch (error) {
+        // 6. Handle any errors during the API call.
         console.error(error);
         const errorMessageContent =
           error instanceof Error
@@ -189,6 +232,7 @@ const App: React.FC = () => {
           role: MessageRole.ERROR,
           content: errorMessageContent,
         };
+        // Replace the model's placeholder message with an error message.
         updateSessionMessages(finalSessionId, (messages) => {
           const newMessages = [...messages];
           if (newMessages.length > 0) {
@@ -202,7 +246,8 @@ const App: React.FC = () => {
     },
     [isLoading, activeSessionId, chatSessions, updateSessionMessages],
   );
-
+  
+  // --- EVENT HANDLERS ---
   const selectChat = (id: string) => {
     setActiveSessionId(id);
     setIsSidebarOpen(false);
@@ -216,6 +261,7 @@ const App: React.FC = () => {
     if (!sessionToDelete) return;
     const remainingSessions = chatSessions.filter((s) => s.id !== sessionToDelete);
     setChatSessions(remainingSessions);
+    // If the active chat was deleted, select another one or start a new chat.
     if (activeSessionId === sessionToDelete) {
       if (remainingSessions.length > 0) {
         setActiveSessionId(remainingSessions[0].id);
@@ -230,6 +276,7 @@ const App: React.FC = () => {
     setSessionToDelete(null);
   };
 
+  // --- SPEECH RECOGNITION ---
   const onCommand = useCallback(
     (command: string) => {
       if (command === 'send message') {
@@ -251,11 +298,15 @@ const App: React.FC = () => {
     hasRecognitionSupport,
   } = useSpeechRecognition({ onCommand });
 
+  // Update text input with the transcript from speech recognition.
   useEffect(() => {
     if (transcript) {
       setInput(transcript);
     }
   }, [transcript]);
+
+
+  // --- RENDER LOGIC ---
 
   if (isAuthLoading) {
     return (
@@ -264,7 +315,7 @@ const App: React.FC = () => {
       </div>
     );
   }
-
+  
   const lastMessage =
     activeSession?.messages[activeSession.messages.length - 1];
   
@@ -296,7 +347,6 @@ const App: React.FC = () => {
         </p>
       </ConfirmationModal>
 
-
       <main className="flex-1 flex flex-col h-screen">
         <header className="flex items-center p-4 border-b border-gray-200 dark:border-gray-700 md:hidden">
           <button onClick={() => setIsSidebarOpen(true)}>
@@ -314,6 +364,7 @@ const App: React.FC = () => {
                 {activeSession.messages.map((message, index) => (
                   <ChatMessage key={index} message={message} />
                 ))}
+                {/* Show loading dots only when waiting for the first chunk of a new message */}
                 {isLoading &&
                   lastMessage?.role === MessageRole.MODEL &&
                   lastMessage?.content === '' && (
@@ -327,6 +378,7 @@ const App: React.FC = () => {
                 <div ref={messagesEndRef} />
               </>
             ) : (
+              // Show welcome screen for new chats
               !isLoading && <WelcomeScreen onPromptClick={handleSendMessage} />
             )}
           </div>
